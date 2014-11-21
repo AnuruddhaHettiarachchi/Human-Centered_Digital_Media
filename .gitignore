@@ -14,6 +14,14 @@ $RECYCLE.BIN/
 *.msm
 *.msp
 
+# Visual Studio Intermediate Files
+Human-Centered_Digital_Media
+
+Human-Centered_Digital_Media.sln
+Human-Centered_Digital_Media.sdf
+Human-Centered_Digital_Media.opensdf
+
+
 # =========================
 # Operating System Files
 # =========================
