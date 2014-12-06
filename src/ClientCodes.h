@@ -206,6 +206,7 @@ public:
 	// Global rotation matrix
 	double GlobalRotation[3][3];
 
+	// Eular angles
 	double EulerX;
 	double EulerY;
 	double EulerZ;

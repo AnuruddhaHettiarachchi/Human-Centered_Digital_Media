@@ -1,5 +1,6 @@
 #include "ViconRTClient.h"
 #include "imageloader.h"
+#include "Matrices.h"
 
 #include <windows.h>
 
@@ -16,10 +17,18 @@
 
 /* -------------------- variables -------------------- */
 
+// Vicon variables
+#define DEFAULT_IP "172.21.12.17"
+ViconRTClient viconClient;
+
+string headName = "Head3:Head3";
+string tabName = "Tab3:Tab3";
+
+// GL variables
 int windowID;
 int Win[2];
 
-GLuint _textureId0;
+GLuint _textureId0;	// not a good way to define textures. use a vector or something for dynamically adding textures
 GLuint _textureId1;
 GLuint _textureId2;
 GLuint _textureId3;
@@ -32,29 +41,31 @@ GLuint _textureId9;
 GLuint _textureId10;
 GLuint _textureId11;
 GLuint _textureId12;
+GLuint _textureId13;
 
-int lastClickedX = 0;
-int lastClickedY = 0;
-int currentX = 0;
-int currentY = 0;
+// Input variables 
+int lastClickedX = 0;	// not used yet
+int lastClickedY = 0;	// not used yet
+int currentX = 0;	// not used yet
+int currentY = 0;	// not used yet
 int currentZ = -40;
 
+// Transformation variables
 GLfloat camTrans_X = 0.0;
 GLfloat camTrans_Y = 0.0;
 GLfloat camTrans_Z = 0.0;
+GLfloat camRot_angle = 0.0;
 GLfloat camRot_X = 0.0;
 GLfloat camRot_Y = 0.0;
 GLfloat camRot_Z = 0.0;
 
-#define DEFAULT_IP "172.21.12.17"
-ViconRTClient viconClient;
-
-vector< BodyData > myBodies;
-vector< BodyData >::iterator iBodyData;
-vector< MarkerData > myMarkers;
-vector< MarkerData >::iterator  iMarkerData;
-
-int channelIndex = 0;
+GLfloat tabTrans_X = 0.0;
+GLfloat tabTrans_Y = 0.0;
+GLfloat tabTrans_Z = 0.0;
+GLfloat tabRot_angle = 0.0;
+GLfloat tabRot_X = 0.0;
+GLfloat tabRot_Y = 0.0;
+GLfloat tabRot_Z = 0.0;
 
 /* --------------- function definitions -------------- */
 const float PI = 3.141592;
@@ -99,8 +110,6 @@ int main(int argc, char** argv) {
 	initGl();
 
 	viconClient.getChannelInfo();
-	viconClient.showMarkers(VERBOSE);
-	viconClient.showBodies(VERBOSE);
 
 	glutMainLoop();
 
@@ -126,7 +135,7 @@ void initGl(void) {
 
 	Image* image0 = loadBMP("../res/images/background.bmp");
 	Image* image1 = loadBMP("../res/images/chrome.bmp");
-	Image* image2 = loadBMP("../res/images/gmail.bmp");
+	Image* image2 = loadBMP("../res/images/PLAY.bmp");
 	Image* image3 = loadBMP("../res/images/skydrive.bmp");
 	Image* image4 = loadBMP("../res/images/plus.bmp");
 	Image* image5 = loadBMP("../res/images/facebook.bmp");
@@ -137,6 +146,7 @@ void initGl(void) {
 	Image* image10 = loadBMP("../res/images/calendar.bmp");
 	Image* image11 = loadBMP("../res/images/blogger.bmp");
 	Image* image12 = loadBMP("../res/images/appengine.bmp");
+	Image* image13 = loadBMP("../res/images/tab.bmp");
 
 	_textureId0 = loadTexture(image0);
 	_textureId1 = loadTexture(image1);
@@ -151,28 +161,42 @@ void initGl(void) {
 	_textureId10 = loadTexture(image10);
 	_textureId11 = loadTexture(image11);
 	_textureId12 = loadTexture(image12);
-	delete image1, image2, image3, image4, image5, image6, image7, image8, image9, image10, image11, image12;
+	_textureId13 = loadTexture(image13);
+	delete image1, image2, image3, image4, image5, image6, image7, image8, image9, image10, image11, image12, image13;
 }
 
 void idle(void) {
 	viconClient.getFrame();
-	myBodies = viconClient.getAllBodyData();
-	channelIndex=0;
-	for(iBodyData = myBodies.begin(); iBodyData != myBodies.end(); iBodyData++)
-	{
-		camTrans_X = iBodyData->TX;
-		camTrans_Y = iBodyData->TY;
-		camTrans_Z = iBodyData->TZ;
-		camRot_X = iBodyData->EulerX;
-		camRot_Y = iBodyData->EulerY;
-		camRot_Z = iBodyData->EulerZ;
-		//cout << " (" << camTrans_X << ", " << camTrans_Y << ", " << camTrans_Z << ")" << endl;
-		//cout << " (" << camRot_X << ", " << camRot_Y << ", " << camRot_Z << ")" << endl;
-		channelIndex++;
+
+	BodyData head = viconClient.getBodyData(headName);
+	camTrans_X = head.TX;
+	camTrans_Y = head.TY;
+	camTrans_Z = head.TZ;
+	camRot_angle = sqrtf(head.RX*head.RX + head.RY*head.RY + head.RZ*head.RZ);
+	if(camRot_angle){
+		camRot_X = head.RX/camRot_angle;
+		camRot_Y = head.RY/camRot_angle;
+		camRot_Z = head.RZ/camRot_angle;
 	}
+	//cout << " (" << camTrans_X << ", " << camTrans_Y << ", " << camTrans_Z << ")" << endl;
+	//cout << " cam rotation (" << camRot_angle*180/PI << ")" << endl;
+	
+	BodyData tab = viconClient.getBodyData(tabName);
+	tabTrans_X = tab.TX - camTrans_X; // Translations are relative to camera
+	tabTrans_Y = tab.TY - camTrans_Y;
+	tabTrans_Z = tab.TZ - camTrans_Z;
+	tabRot_angle = sqrtf(tab.RX*tab.RX + tab.RY*tab.RY + tab.RZ*tab.RZ);
+	if(tabRot_angle){
+		tabRot_X = tab.RX/tabRot_angle;
+		tabRot_Y = tab.RY/tabRot_angle;
+		tabRot_Z = tab.RZ/tabRot_angle;
+	}
+	//cout << "tab trans (" << tabTrans_X << ", " << tabTrans_Y << ", " << tabTrans_Z << ")" << endl;
+	//cout << " tab rot (" << tabRot_angle*180/PI << ")" << endl;
+	//viconClient.showBodies(VERBOSE);
+	
 	glutSetWindow(windowID);
 	glutPostRedisplay();
-
 }
 
 void myReshape(int w, int h) {
@@ -186,16 +210,26 @@ void myReshape(int w, int h) {
 }
 
 void display(void) {
+	Matrix4 transMatrix;
+	//Vector3 globalTranslation(0.0, 0.0, -10);
+	//Vector3 localTranslation;
+	//Vector3 globalRotation();
+	//Vector3 localRotation;
+
 	glClearColor(0.7f,0.7f,0.9f,1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
 	glEnable(GL_TEXTURE_2D);
-
+	
+	/////////////////////////////////////////////////////////////////////////////////////////////
+	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_BLEND);
 
+	// TODO: Defining the background. To be removed after getting AR glasses
 	glPushMatrix();
 		glMatrixMode(GL_MODELVIEW);
 		glLoadIdentity();
-		glRotatef(-camRot_Z*180/PI, 0.0, 1.0, 0.0);
+		// Apply all transformations applied for objects here as well
+		glRotatef(-camRot_angle*180/PI, -camRot_Y, camRot_Z, -camRot_X);
 		glScalef(2.5, 1.5,1.0);
 		glBindTexture(GL_TEXTURE_2D, _textureId0);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -219,18 +253,68 @@ void display(void) {
 			glTranslatef(0.0, 0.0, -1.0);
 			drawUnitSquare();
 		glPopMatrix();
+		glPushMatrix();
+			glRotatef(90, 1.0, 0.0, 0.0);
+			glTranslatef(0.0, 0.0, -1.0);
+			drawUnitSquare();
+		glPopMatrix();
+		glPushMatrix();
+			glRotatef(-90, 1.0, 0.0, 0.0);
+			glTranslatef(0.0, 0.0, -1.0);
+			drawUnitSquare();
+		glPopMatrix();
 	glPopMatrix();
-	
 	//glEnable(GL_BLEND);
 	glBlendFunc (GL_ONE, GL_ONE);
+
+	/////////////////////////////////////////////////////////////////////////////////////////////
+
+	glEnable(GL_DEPTH_TEST);
 
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 
 	glPushMatrix();
-		glRotatef(-camRot_Z*180/PI, 0.0, 1.0, 0.0);
+		// Camera
+		glRotatef(-camRot_angle*180/PI, -camRot_Y, camRot_Z, -camRot_X);
+
+		// Tab
+		glPushMatrix();		
+			glTranslatef(-tabTrans_Y/30, tabTrans_Z/30, -tabTrans_X/30);
+			glRotatef(tabRot_angle*180/PI, -tabRot_Y, tabRot_Z, -tabRot_X);	
+			glRotatef(-90, 1.0, 0.0, 0.0);	
+			glScalef(6.0, 3.0, 1.0);
+			glPushMatrix();	
+				glBindTexture(GL_TEXTURE_2D, _textureId13);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+				drawUnitSquare();
+			glPopMatrix();
+			glPushMatrix();
+				glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+				glLineWidth(3.0);
+				glPushMatrix();
+					glTranslatef(2.0, 0.0, 0.0);
+					drawUnitSquare();
+				glPopMatrix();
+				glPushMatrix();
+					glTranslatef(-2.0, 0.0, 0.0);
+					drawUnitSquare();
+				glPopMatrix();
+				glPushMatrix();
+					glTranslatef(0.0, 2.0, 0.0);
+					drawUnitSquare();
+				glPopMatrix();
+				glPushMatrix();
+					glTranslatef(0.0, -2.0, 0.0);
+					drawUnitSquare();
+				glPopMatrix();
+				glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+			glPopMatrix();
+		glPopMatrix();
+
+		// Apps
 		glPushMatrix();
-			glRotatef(0.0, 0.0, 1.0, 0.0);
 			glTranslatef(0.0, 0.0, currentZ);
 			glScalef(5.0, 5.0, 1.0);
 			glBindTexture(GL_TEXTURE_2D, _textureId1);
@@ -256,15 +340,24 @@ void display(void) {
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 			drawUnitSquare();
 		glPopMatrix();
-		glPushMatrix();
+
+		glPushMatrix(); ///////////////////////////////////
+			//glTranslatef(-20.0, 0.0, -30.0);
+			//transMatrix.identity();
+			
+			//transMatrix.rotate(90.0, 0.0, 1.0, 0.0);
+			glTranslatef(currentZ, 0.0, 0.0);
 			glRotatef(90.0, 0.0, 1.0, 0.0);
-			glTranslatef(0.0, 0.0, currentZ);
+			//transMatrix.translate(0.0, 0.0, currentZ);
+			//glRotatef(30.0, -1.0, 0.0, 0.0);
+			//glRotatef(30.0, 0.0, 0.0, -1.0);
 			glScalef(5.0, 5.0, 1.0);
 			glBindTexture(GL_TEXTURE_2D, _textureId4);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 			drawUnitSquare();
-		glPopMatrix();
+		glPopMatrix(); ////////////////////////////////////
+
 		glPushMatrix();
 			glRotatef(120.0, 0.0, 1.0, 0.0);
 			glTranslatef(0.0, 0.0, currentZ);

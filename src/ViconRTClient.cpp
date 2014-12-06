@@ -350,7 +350,9 @@ void ViconRTClient::getChannelInfo(void) {
 			else
 			{
 				//	It could be a new channel type.
+				#ifdef VC_VERBOSE
 				std::cout << "ViconRTClient: WARNING, Unknown Channel Type: " << Type << std::endl;
+				#endif VC_VERBOSE
 			}
 
 		}
