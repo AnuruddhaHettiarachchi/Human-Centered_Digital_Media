@@ -18,11 +18,15 @@
 /* -------------------- variables -------------------- */
 
 // Vicon variables
-#define DEFAULT_IP "172.21.12.17"
+#define DEFAULT_IP "172.21.18.192"
 ViconRTClient viconClient;
 
 string headName = "Head3:Head3";
 string tabName = "Tab3:Tab3";
+string handRootName = "hand:Root";
+
+string indexFingername = "hand:Index";
+string thumbName = "hand:Thumb";
 
 // GL variables
 int windowID;
@@ -43,11 +47,14 @@ GLuint _textureId11;
 GLuint _textureId12;
 GLuint _textureId13;
 
+bool obj1Selected = false;
+bool objectGrabbed = false;
+
 // Input variables 
-int lastClickedX = 0;	// not used yet
-int lastClickedY = 0;	// not used yet
-int currentX = 0;	// not used yet
-int currentY = 0;	// not used yet
+int lastClickedX = 0;	// not used
+int lastClickedY = 0;	// not used
+int currentX = 0;	// not used
+int currentY = 0;	// not used
 int currentZ = -40;
 
 // Transformation variables
@@ -59,6 +66,14 @@ GLfloat camRot_X = 0.0;
 GLfloat camRot_Y = 0.0;
 GLfloat camRot_Z = 0.0;
 
+GLfloat cursorTrans_X = 0.0;
+GLfloat cursorTrans_Y = 0.0;
+GLfloat cursorTrans_Z = 0.0;
+GLfloat cursorRot_angle = 0.0;
+GLfloat cursorRot_X = 0.0;
+GLfloat cursorRot_Y = 0.0;
+GLfloat cursorRot_Z = 0.0;
+
 GLfloat tabTrans_X = 0.0;
 GLfloat tabTrans_Y = 0.0;
 GLfloat tabTrans_Z = 0.0;
@@ -66,6 +81,17 @@ GLfloat tabRot_angle = 0.0;
 GLfloat tabRot_X = 0.0;
 GLfloat tabRot_Y = 0.0;
 GLfloat tabRot_Z = 0.0;
+
+GLfloat obj1Trans_X = 0.0;
+GLfloat obj1Trans_Y = 0.0;
+GLfloat obj1Trans_Z = -600.0;
+GLfloat obj1Rot_angle = 90.0;
+GLfloat obj1Rot_X = 1.0;
+GLfloat obj1Rot_Y = 0.0;
+GLfloat obj1Rot_Z = 0.0;
+GLfloat obj1Scale = 2.0;
+
+
 
 /* --------------- function definitions -------------- */
 const float PI = 3.141592;
@@ -170,31 +196,90 @@ void idle(void) {
 
 	BodyData head = viconClient.getBodyData(headName);
 	camTrans_X = head.TX;
-	camTrans_Y = head.TY;
-	camTrans_Z = head.TZ;
+	camTrans_Y = head.TZ;
+	camTrans_Z = -head.TY;
 	camRot_angle = sqrtf(head.RX*head.RX + head.RY*head.RY + head.RZ*head.RZ);
 	if(camRot_angle){
 		camRot_X = head.RX/camRot_angle;
-		camRot_Y = head.RY/camRot_angle;
-		camRot_Z = head.RZ/camRot_angle;
+		camRot_Y = head.RZ/camRot_angle;
+		camRot_Z = -head.RY/camRot_angle;
 	}
-	//cout << " (" << camTrans_X << ", " << camTrans_Y << ", " << camTrans_Z << ")" << endl;
-	//cout << " cam rotation (" << camRot_angle*180/PI << ")" << endl;
-	
+
 	BodyData tab = viconClient.getBodyData(tabName);
 	tabTrans_X = tab.TX - camTrans_X; // Translations are relative to camera
-	tabTrans_Y = tab.TY - camTrans_Y;
-	tabTrans_Z = tab.TZ - camTrans_Z;
+	tabTrans_Y = tab.TZ - camTrans_Y;
+	tabTrans_Z = -(tab.TY + camTrans_Z);
 	tabRot_angle = sqrtf(tab.RX*tab.RX + tab.RY*tab.RY + tab.RZ*tab.RZ);
 	if(tabRot_angle){
 		tabRot_X = tab.RX/tabRot_angle;
-		tabRot_Y = tab.RY/tabRot_angle;
-		tabRot_Z = tab.RZ/tabRot_angle;
+		tabRot_Y = tab.RZ/tabRot_angle;
+		tabRot_Z = -tab.RY/tabRot_angle;
 	}
-	//cout << "tab trans (" << tabTrans_X << ", " << tabTrans_Y << ", " << tabTrans_Z << ")" << endl;
-	//cout << " tab rot (" << tabRot_angle*180/PI << ")" << endl;
+
+	BodyData handRoot = viconClient.getBodyData(handRootName);
+	cursorTrans_X = handRoot.TX - camTrans_X; // Translations are relative to camera
+	cursorTrans_Y = handRoot.TZ - camTrans_Y;
+	cursorTrans_Z = -(handRoot.TY + camTrans_Z);
+	cursorRot_angle = sqrtf(handRoot.RX*handRoot.RX + handRoot.RY*handRoot.RY + handRoot.RZ*handRoot.RZ);
+	if(cursorRot_angle){
+		cursorRot_X = handRoot.RX/cursorRot_angle;
+		cursorRot_Y = handRoot.RZ/cursorRot_angle;
+		cursorRot_Z = -handRoot.RY/cursorRot_angle;
+	}
+	// for each object
+	GLfloat distanceToObj = (cursorTrans_X - obj1Trans_X)*(cursorTrans_X - obj1Trans_X)
+		+ (cursorTrans_Y - obj1Trans_Y)*(cursorTrans_Y - obj1Trans_Y)
+		+ (cursorTrans_Z - obj1Trans_Z)*(cursorTrans_Z - obj1Trans_Z);
+	if(distanceToObj != 0){
+		distanceToObj = sqrt(distanceToObj);
+	}
+	if(distanceToObj < 50){
+		obj1Selected = true;
+		cout << "Object selected" << endl;
+	} else{
+		obj1Selected = false;
+	}
+	// end of for
+
+	MarkerData thumb = viconClient.getMarkerData(thumbName);
+	MarkerData indexFinger = viconClient.getMarkerData(indexFingername);
+	if(thumb.Visible && indexFinger.Visible ){
+		GLfloat fingerDistance = (thumb.X - indexFinger.X)*(thumb.X - indexFinger.X)
+			+ (thumb.Y - indexFinger.Y)*(thumb.Y - indexFinger.Y)
+			+ (thumb.Z - indexFinger.Z)+(thumb.Z - indexFinger.Z);
+		if(fingerDistance != 0){
+			fingerDistance = sqrt(fingerDistance);
+		}
+		if(obj1Selected && fingerDistance < 80){
+			objectGrabbed = true;
+			cout << "GRABBED.." << endl;
+		} else {
+			objectGrabbed = false;
+		}
+	} else {
+		objectGrabbed = false;
+	}
+
+	if(objectGrabbed){
+		obj1Trans_X = cursorTrans_X;
+		obj1Trans_Y = cursorTrans_Y;
+		obj1Trans_Z = cursorTrans_Z;
+		obj1Rot_X = handRoot.RX/obj1Rot_angle;
+		obj1Rot_Y = handRoot.RZ/obj1Rot_angle;
+		obj1Rot_Z = -handRoot.RY/obj1Rot_angle;
+	}
+
+	// Vicon data testing
+	//cout << "hand trans (" << handRoot.TX << ", " << handRoot.TY << ", " << handRoot.TZ << ")" << endl;
+	//cout << " hand rot (" << obj1Rot_angle*180/PI << ")" << endl;
+	//cout << obj1Rot_X << ", " << obj1Rot_Y << ", " << obj1Rot_Z << ")" << endl;
+
+	//cout << "Start.........................................." << endl;
 	//viconClient.showBodies(VERBOSE);
-	
+	//viconClient.showMarkers(VERBOSE);
+	//cout << "End.........................................." << endl;
+
+
 	glutSetWindow(windowID);
 	glutPostRedisplay();
 }
@@ -210,12 +295,6 @@ void myReshape(int w, int h) {
 }
 
 void display(void) {
-	Matrix4 transMatrix;
-	//Vector3 globalTranslation(0.0, 0.0, -10);
-	//Vector3 localTranslation;
-	//Vector3 globalRotation();
-	//Vector3 localRotation;
-
 	glClearColor(0.7f,0.7f,0.9f,1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
 	glEnable(GL_TEXTURE_2D);
@@ -229,7 +308,7 @@ void display(void) {
 		glMatrixMode(GL_MODELVIEW);
 		glLoadIdentity();
 		// Apply all transformations applied for objects here as well
-		glRotatef(-camRot_angle*180/PI, -camRot_Y, camRot_Z, -camRot_X);
+		glRotatef(-camRot_angle*180/PI, camRot_X, camRot_Y, camRot_Z);
 		glScalef(2.5, 1.5,1.0);
 		glBindTexture(GL_TEXTURE_2D, _textureId0);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -276,12 +355,23 @@ void display(void) {
 
 	glPushMatrix();
 		// Camera
-		glRotatef(-camRot_angle*180/PI, -camRot_Y, camRot_Z, -camRot_X);
+		glRotatef(-camRot_angle*180/PI, camRot_X, camRot_Y, camRot_Z);
+
+		// Cursor
+		glPushMatrix();
+			glDisable(GL_TEXTURE_2D);
+			glTranslatef(cursorTrans_X/30, cursorTrans_Y/30, cursorTrans_Z/30);
+			glRotatef(cursorRot_angle*180/PI, cursorRot_X, cursorRot_Y, cursorRot_Z);
+			glRotatef(-90, 1.0, 0.0, 0.0);	
+			glScalef(1.0, 1.0, 1.0);
+			drawUnitCube();
+			glEnable(GL_TEXTURE_2D);
+		glPopMatrix();
 
 		// Tab
 		glPushMatrix();		
-			glTranslatef(-tabTrans_Y/30, tabTrans_Z/30, -tabTrans_X/30);
-			glRotatef(tabRot_angle*180/PI, -tabRot_Y, tabRot_Z, -tabRot_X);	
+			glTranslatef(tabTrans_X/30, tabTrans_Y/30, tabTrans_Z/30);
+			glRotatef(tabRot_angle*180/PI, tabRot_X, tabRot_Y, tabRot_Z);	
 			glRotatef(-90, 1.0, 0.0, 0.0);	
 			glScalef(6.0, 3.0, 1.0);
 			glPushMatrix();	
@@ -342,20 +432,24 @@ void display(void) {
 		glPopMatrix();
 
 		glPushMatrix(); ///////////////////////////////////
-			//glTranslatef(-20.0, 0.0, -30.0);
-			//transMatrix.identity();
-			
-			//transMatrix.rotate(90.0, 0.0, 1.0, 0.0);
-			glTranslatef(currentZ, 0.0, 0.0);
-			glRotatef(90.0, 0.0, 1.0, 0.0);
-			//transMatrix.translate(0.0, 0.0, currentZ);
-			//glRotatef(30.0, -1.0, 0.0, 0.0);
-			//glRotatef(30.0, 0.0, 0.0, -1.0);
-			glScalef(5.0, 5.0, 1.0);
-			glBindTexture(GL_TEXTURE_2D, _textureId4);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-			drawUnitSquare();
+			glTranslatef(obj1Trans_X/30, obj1Trans_Y/30, obj1Trans_Z/30);
+			glRotatef(obj1Rot_angle*180/PI, obj1Rot_X, obj1Rot_Y, obj1Rot_Z);
+			glRotatef(-90, 1.0, 0.0, 0.0);	
+			glScalef(obj1Scale, obj1Scale, 1.0);
+			glPushMatrix();	
+				glBindTexture(GL_TEXTURE_2D, _textureId4);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+				drawUnitSquare();
+			glPopMatrix();
+			if(obj1Selected){
+				glPushMatrix();
+				glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+				glLineWidth(30.0);
+				drawUnitSquare();
+				glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+				glPopMatrix();
+			}
 		glPopMatrix(); ////////////////////////////////////
 
 		glPushMatrix();
